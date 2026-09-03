@@ -1595,6 +1595,24 @@ class FinTS3PinTanClient(FinTS3Client):
                         for r in seg.responses
                     ]
 
+                    # Some banks (Commerzbank) omit vop_single_result entirely and report
+                    # the outcome only inside payment_status_report (a pain.002 document
+                    # carrying e.g. <GrpSts>RCVC</GrpSts>). result_code is None there, so
+                    # neither branch below can match -- no NeedVOPResponse is produced, no
+                    # HKVPA is ever sent, and the order is rejected with 3945 after the TAN.
+                    #
+                    # A present vop_id together with a status report means the bank has
+                    # completed its check and is waiting for the approval, so hand the
+                    # caller a NeedVOPResponse. Banks that fill vop_single_result (e.g.
+                    # Sparkassen, where a separate HKVPA is answered with 9010) are not
+                    # affected: result_code is set for them and this branch is skipped.
+                    if result_code is None and hivpp.vop_id and hivpp.payment_status_report:
+                        return NeedVOPResponse(
+                            vop_result=hivpp,
+                            command_seg=command_seg,
+                            resume_method=resume_func,
+                        )
+
                      # Not Applicable, No Match, Close Match, or exact match but still requires confirmation
                     if result_code in ('RVNA', 'RVNM', 'RVMC')  or (result_code == 'RCVC' and '3945' in all_codes):
                         return NeedVOPResponse(
