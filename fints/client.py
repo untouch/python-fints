@@ -1583,8 +1583,20 @@ class FinTS3PinTanClient(FinTS3Client):
                             resume_method=resume_func,
                         )
 
+                    # Look for 3945 ("approval without VoP confirmation not possible")
+                    # in ALL response segments, not only those attached to the TAN
+                    # segment. Commerzbank attaches it elsewhere: the condition below
+                    # then never matched, no NeedVOPResponse was produced, the flow fell
+                    # through to TAN handling, and HKVPA was never sent -- leaving the
+                    # transfer permanently rejected with 3945.
+                    all_codes = [
+                        r.code
+                        for seg in response.find_segments((HIRMG2, HIRMS2))
+                        for r in seg.responses
+                    ]
+
                      # Not Applicable, No Match, Close Match, or exact match but still requires confirmation
-                    if result_code in ('RVNA', 'RVNM', 'RVMC')  or (result_code == 'RCVC' and '3945' in [res.code for res in response.responses(tan_seg)]):
+                    if result_code in ('RVNA', 'RVNM', 'RVMC')  or (result_code == 'RCVC' and '3945' in all_codes):
                         return NeedVOPResponse(
                             vop_result=hivpp,
                             command_seg=command_seg,
